@@ -1,0 +1,37 @@
+# Keeps this mirror in sync with the official AOSP repository.
+# Upstream has no .github directory, so merging never conflicts with this file.
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 2 * * 1" # every Monday 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Merge upstream main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch https://android.googlesource.com/platform/tools/apksig main
+          if git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            echo "Already up to date with upstream $(git rev-parse --short FETCH_HEAD)"
+            exit 0
+          fi
+          git merge --no-edit -m "Merge upstream apksig $(git rev-parse --short FETCH_HEAD)" FETCH_HEAD
+          git push origin HEAD:master
+      # GitHub disables scheduled workflows after 60 days without repository activity;
+      # re-enabling through the API on every run keeps the schedule alive.
+      - name: Keep the schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/sync-upstream.yml/enable"
